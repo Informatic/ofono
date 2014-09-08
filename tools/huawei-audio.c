@@ -81,7 +81,7 @@ static gboolean audio_receive(GIOChannel *channel,
 {
 	struct modem_data *modem = user_data;
 	char buf[512];
-	ssize_t rlen, wlen;
+	ssize_t rlen, wlen, rlen_in, rlen_buf;
 	int fd;
 
 	if (condition & (G_IO_NVAL | G_IO_ERR)) {
@@ -101,14 +101,19 @@ static gboolean audio_receive(GIOChannel *channel,
 		return FALSE;
 	}
 
-	rlen = read(modem->dsp_in, buf, rlen);
-	if(rlen < 0) {
-		g_printerr("DSP in read failed\n");
-		modem->audio_watch = 0; // ?
-		return FALSE;
+	rlen_in = 0;
+	while(rlen_in < rlen) {
+		rlen_buf = read(modem->dsp_in, buf+rlen_in, rlen-rlen_in);
+		if(rlen_buf < 0) {
+			g_printerr("DSP in read failed\n");
+			modem->audio_watch = 0; // ?
+			return FALSE;
+		} else {
+			rlen_in += rlen_buf;
+		}
 	}
 
-	wlen = write(fd, buf, rlen);
+	wlen = write(fd, buf, rlen_in);
 	if(wlen < 0) {
 		g_printerr("Serial write failed\n");
 		modem->audio_watch = 0; //?
