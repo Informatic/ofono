@@ -64,6 +64,7 @@ struct modem_data {
 	int channels;
 	int speed;
 	int dsp_out;
+	int dsp_in;
 };
 
 struct call_data {
@@ -95,6 +96,20 @@ static gboolean audio_receive(GIOChannel *channel,
 	wlen = write(modem->dsp_out, buf, rlen);
 	if (wlen < 0) {
 		modem->audio_watch = 0;
+		return FALSE;
+	}
+
+	rlen = read(modem->dsp_in, buf, rlen);
+	if(rlen < 0) {
+		g_printerr("DSP in read failed\n");
+		modem->audio_watch = 0; // ?
+		return FALSE;
+	}
+
+	wlen = write(fd, buf, rlen);
+	if(wlen < 0) {
+		g_printerr("Serial write failed\n");
+		modem->audio_watch = 0; //?
 		return FALSE;
 	}
 
@@ -131,10 +146,29 @@ static void open_audio(struct modem_data *modem)
 		g_printerr("Failed to set DSP speed\n");
 
 	fd = open("/dev/ttyUSB1", O_RDWR | O_NOCTTY);
+	modem->dsp_in = open("/dev/dsp", O_RDONLY, 0);
+	if (modem->dsp_in < 0) {
+		g_printerr("Failed to open DSP device\n");
+		close(modem->dsp_out);
+		modem->dsp_out = -1;
+		return;
+	}
+
+	if (ioctl(modem->dsp_in, SNDCTL_DSP_SETFMT, &modem->format) < 0)
+		g_printerr("Failed to set DSP input format\n");
+
+	if (ioctl(modem->dsp_in, SNDCTL_DSP_CHANNELS, &modem->channels) < 0)
+		g_printerr("Failed to set DSP input channels\n");
+
+	if (ioctl(modem->dsp_in, SNDCTL_DSP_SPEED, &modem->speed) < 0)
+		g_printerr("Failed to set DSP input speed\n");
+
 	if (fd < 0) {
 		g_printerr("Failed to open audio port\n");
 		close(modem->dsp_out);
 		modem->dsp_out = -1;
+		close(modem->dsp_in);
+		modem->dsp_in = -1;
 		return;
 	}
 
@@ -150,6 +184,8 @@ static void open_audio(struct modem_data *modem)
 		g_printerr("Failed to create IO channel\n");
 		close(modem->dsp_out);
 		modem->dsp_out = -1;
+		close(modem->dsp_in);
+		modem->dsp_in = -1;
 		close(fd);
 		return;
 	}
@@ -183,6 +219,7 @@ static void close_audio(struct modem_data *modem)
 	}
 
 	close(modem->dsp_out);
+	close(modem->dsp_in);
 }
 
 static void audio_set(struct modem_data *modem, const char *key,
@@ -508,6 +545,7 @@ static void create_modem(DBusConnection *conn,
 	modem->channels = 1;
 	modem->speed = 8000;
 	modem->dsp_out = -1;
+	modem->dsp_in = -1;
 
 	modem->call_list = g_hash_table_new_full(g_str_hash, g_str_equal,
 							NULL, destroy_call);
