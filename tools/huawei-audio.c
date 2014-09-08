@@ -72,6 +72,8 @@ struct call_data {
 	struct modem_data *modem;
 };
 
+static gchar* option_device = "/dev/ttyUSB1";
+
 static GHashTable *modem_list;
 
 static gboolean audio_receive(GIOChannel *channel,
@@ -145,7 +147,6 @@ static void open_audio(struct modem_data *modem)
 	if (ioctl(modem->dsp_out, SNDCTL_DSP_SPEED, &modem->speed) < 0)
 		g_printerr("Failed to set DSP speed\n");
 
-	fd = open("/dev/ttyUSB1", O_RDWR | O_NOCTTY);
 	modem->dsp_in = open("/dev/dsp", O_RDONLY, 0);
 	if (modem->dsp_in < 0) {
 		g_printerr("Failed to open DSP device\n");
@@ -163,6 +164,7 @@ static void open_audio(struct modem_data *modem)
 	if (ioctl(modem->dsp_in, SNDCTL_DSP_SPEED, &modem->speed) < 0)
 		g_printerr("Failed to set DSP input speed\n");
 
+	fd = open(option_device, O_RDWR | O_NOCTTY);
 	if (fd < 0) {
 		g_printerr("Failed to open audio port\n");
 		close(modem->dsp_out);
@@ -801,6 +803,8 @@ static gboolean option_version = FALSE;
 static GOptionEntry options[] = {
 	{ "version", 'v', 0, G_OPTION_ARG_NONE, &option_version,
 				"Show version information and exit" },
+	{ "device", 'd', 0, G_OPTION_ARG_FILENAME, &option_device,
+				"Serial audio device path" },
 	{ NULL },
 };
 
